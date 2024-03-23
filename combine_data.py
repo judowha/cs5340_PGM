@@ -4,9 +4,9 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import matthews_corrcoef, confusion_matrix
 from scipy.stats import pearsonr
 from sklearn.model_selection import train_test_split
-from pgmpy.models import BayesianNetwork
-from pgmpy.estimators import BayesianEstimator
-from pgmpy.inference import VariableElimination
+from pgmpy.models import BayesianNetwork, MarkovNetwork
+from pgmpy.estimators import HillClimbSearch, MaximumLikelihoodEstimator, BicScore, BayesianEstimator, PC
+from pgmpy.inference import VariableElimination, BeliefPropagation
 
 def combine_data():
     application = pd.read_csv("./dataset/application_record.csv")
@@ -14,7 +14,7 @@ def combine_data():
     join_df = pd.merge(application, credit, on="ID", how='inner')
     columns_to_replace = ["FLAG_OWN_CAR", "FLAG_OWN_REALTY", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"]
     join_df[columns_to_replace] = join_df[columns_to_replace].replace({'Y': 1, 'N': 0})
-    indue_status = ["X", "C", "0"]
+    indue_status = ["X", "C", "0", "1", "2"]
     risk = join_df["STATUS"].isin(indue_status)
     risk_value = np.where(risk, 0, 1)
     join_df['RISK'] = risk_value
@@ -53,6 +53,8 @@ def data_preprocess():
     columns_to_normalize = ["CNT_CHILDREN", "AMT_INCOME_TOTAL", "CNT_FAM_MEMBERS", "DAYS_EMPLOYED", "DAYS_BIRTH"]
     scaler = StandardScaler()
     credit_data[columns_to_normalize] = scaler.fit_transform(credit_data[columns_to_normalize])
+    for col in columns_to_normalize:
+        credit_data[col] = pd.qcut(credit_data[col], q=10, labels=False, duplicates='drop') 
 
     income_type_dict = {"Working": 5, "Commercial associate": 3, "Pensioner": 3, "State servant": 5, "Student": 1}
     education_type_dict = {"Higher education": 4, "Secondary / secondary special": 2, "Incomplete higher": 3, "Lower secondary": 1, "Academic degree": 5}
@@ -85,9 +87,16 @@ def train_model():
     data_df = pd.read_csv("./dataset/oversampling_records.csv")
     data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
     X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.2, random_state=42)
-    model = BayesianNetwork([('AMT_INCOME_TOTAL', 'RISK'), ('NAME_EDUCATION_TYPE', 'RISK'), ("FLAG_OWN_CAR", "RISK"),
-                             ("DAYS_EMPLOYED", "AMT_INCOME_TOTAL"), ("NAME_INCOME_TYPE", "AMT_INCOME_TOTAL"),
-                             ("NAME_HOUSING_TYPE", "RISK"), ("CNT_CHILDREN", "RISK"), ("FLAG_OWN_REALTY", "RISK")])
+    
+    hc = PC(X_train)
+    best_model = hc.estimate(scoring_method=BicScore(X_train))
+    edges = list(best_model.edges())
+    model = BayesianNetwork(edges)
+        
+    # model = MarkovNetwork([('AMT_INCOME_TOTAL', 'RISK'),('AMT_INCOME_TOTAL', 'NAME_HOUSING_TYPE'), ('NAME_EDUCATION_TYPE', 'RISK'), 
+    #                          ('NAME_EDUCATION_TYPE', 'AMT_INCOME_TOTAL'),("FLAG_OWN_CAR", "RISK"),
+    #                          ("DAYS_EMPLOYED", "AMT_INCOME_TOTAL"), ("NAME_INCOME_TYPE", "AMT_INCOME_TOTAL"),
+    #                          ("NAME_HOUSING_TYPE", "RISK"), ("CNT_CHILDREN", "RISK"), ("FLAG_OWN_REALTY", "RISK"), ])
     model.fit(X_train, estimator=BayesianEstimator)
     # Perform inference
     infer = VariableElimination(model)
@@ -97,8 +106,14 @@ def train_model():
     for i in test_dict:
         query_result = infer.query(variables=['RISK'], evidence=i)
         result.append(np.argmax(query_result.values))
-    confusion_matrix(y_test["RISK"], result, labels=[0, 1])
-
+        # try:
+        #     query_result = infer.query(variables=['RISK'], evidence=i)
+        #     result.append(np.argmax(query_result.values))
+        # except Exception as e:
+        #     print(e)
+        #     exit(0)
+    matrix = confusion_matrix(y_test, result, labels=[0, 1])
+    print(str(matrix))
 
 combine_data()
 data_preprocess()
