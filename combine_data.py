@@ -91,8 +91,10 @@ def train_model():
     model.fit(X_train, estimator=BayesianEstimator)
     # Perform inference
     infer = VariableElimination(model)
+    test_dict = X_test[["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_CAR", "DAYS_EMPLOYED", "NAME_INCOME_TYPE",
+                        "NAME_HOUSING_TYPE", "CNT_CHILDREN", "FLAG_OWN_REALTY"]].to_dict("records")
     result = []
-    for i in X_test:
+    for i in test_dict:
         query_result = infer.query(variables=['RISK'], evidence=i)
         result.append(np.argmax(query_result.values))
     confusion_matrix(y_test["RISK"], result, labels=[0, 1])
