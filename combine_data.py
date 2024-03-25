@@ -1,12 +1,15 @@
 import pandas as pd
 import numpy as np
+import pomegranate.bayesian_network
+from pgmpy.factors.discrete import DiscreteFactor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import matthews_corrcoef, confusion_matrix, accuracy_score
 from scipy.stats import pearsonr
 from sklearn.model_selection import train_test_split
-from pgmpy.models import BayesianNetwork, MarkovNetwork
-from pgmpy.estimators import HillClimbSearch, MaximumLikelihoodEstimator, BicScore, BayesianEstimator, PC, MmhcEstimator, ExpectationMaximization
+from pgmpy.models import BayesianNetwork, MarkovNetwork, MarkovModel
+from pgmpy.estimators import MaximumLikelihoodEstimator, BicScore, BayesianEstimator, MmhcEstimator, ExpectationMaximization
 from pgmpy.inference import VariableElimination, BeliefPropagation
+from joblib import dump
 
 def combine_data():
     application = pd.read_csv("./dataset/application_record.csv")
@@ -114,6 +117,7 @@ def train_model():
     print(str(matrix))
 
 def train_customized():
+    print("train with MLE")
     data_df = pd.read_csv("./dataset/oversampling_records.csv")
     data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
     print(data_df["RISK"].unique())
@@ -121,7 +125,7 @@ def train_customized():
     risk_num = (X_train["RISK"] == 1).sum()
     print(risk_num / len(X_train))
     # used_features = ['DAYS_EMPLOYED', 'AMT_INCOME_TOTAL', 'NAME_INCOME_TYPE', "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY"]
-    used_features = [ "AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", 
+    used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
                      "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
     # model = BayesianNetwork([('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('NAME_INCOME_TYPE', 'AMT_INCOME_TOTAL'),
     #                          ('AMT_INCOME_TOTAL', 'RISK'), ("NAME_EDUCATION_TYPE", "RISK"), ("FLAG_OWN_REALTY", "RISK")])
@@ -130,6 +134,7 @@ def train_customized():
                              ("NAME_EDUCATION_TYPE", "RISK"),("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"), 
                              ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK")])
     model.fit(X_train, estimator=MaximumLikelihoodEstimator)
+    dump(model, "./BayesianNetwork_MLE.joblib")
     predictions = model.predict(X_test[used_features])
     print(predictions["RISK"].unique())
     print(len(y_test))
@@ -144,8 +149,80 @@ def train_customized():
     print(conf_matrix)
 
 
-combine_data()
-data_preprocess()
-analyze_data()
-# train_model()
-train_customized()
+def train_others():
+    print("train with expectation maximization")
+    data_df = pd.read_csv("./dataset/oversampling_records.csv")
+    data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
+    print(data_df["RISK"].unique())
+    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.1, random_state=42)
+    risk_num = (X_train["RISK"] == 1).sum()
+    print(risk_num / len(X_train))
+    used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
+                     "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
+    model = MarkovModel([('DAYS_EMPLOYED', 'RISK'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'RISK'),
+                        ("NAME_EDUCATION_TYPE", "RISK"), ("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"),
+                        ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK")])
+    # ten_to_two_array = []
+    # for i in range(10):
+    #     for j in range(2):
+    #         ten_to_two_array.append([i, j])
+    #
+    # ten_to_ten_array = []
+    # for i in range(10):
+    #     for j in range(10):
+    #         ten_to_two_array.append([i, j])
+    #
+    # six_to_two_array = []
+    # for i in range(6):
+    #     for j in range(2):
+    #         six_to_two_array.append([i, j])
+    #
+    # five_to_two_array = []
+    # for i in range(1, 6):
+    #     for j in range(2):
+    #         five_to_two_array.append([i, j])
+    #
+    # two_to_two_array = []
+    # for i in range(2):
+    #     for j in range(2):
+    #         two_to_two_array.append([i, j])
+
+    # factor_daysEmp_risk = DiscreteFactor(['DAYS_EMPLOYED', 'RISK'], cardinality=[10, 2], values=np.array(ten_to_two_array))
+    # factor_daysEmp_income = DiscreteFactor(['DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'], cardinality=[10, 10], values=np.array(ten_to_ten_array))
+    # factor_income_risk = DiscreteFactor(['AMT_INCOME_TOTAL', 'RISK'], cardinality=[10, 2], values=np.array(ten_to_two_array))
+    # factor_education_risk = DiscreteFactor(["NAME_EDUCATION_TYPE", "RISK"], cardinality=[5, 2], values=np.array(five_to_two_array))
+    # factor_realty_risk = DiscreteFactor(["FLAG_OWN_REALTY", "RISK"], cardinality=[2, 2], values=np.array(two_to_two_array))
+    # factor_children_risk = DiscreteFactor(["CNT_CHILDREN", "RISK"], cardinality=[10, 2], values=np.array(ten_to_two_array))
+    # factor_housing_risk = DiscreteFactor(["NAME_HOUSING_TYPE", "RISK"], cardinality=[6, 2], values=np.array(six_to_two_array))
+    # factor_car_risk = DiscreteFactor(["FLAG_OWN_CAR", "RISK"], cardinality=[2, 2], values=np.array(two_to_two_array))
+    # model.add_factors(factor_daysEmp_risk, factor_car_risk, factor_housing_risk, factor_daysEmp_income, factor_children_risk, factor_realty_risk, factor_income_risk, factor_education_risk)
+    mle = MaximumLikelihoodEstimator(model, X_train)
+
+    factors = []
+    for node, cpt in mle.get_parameters().items():
+        cardinality = [len(X_train[node].unique())]
+        factor = DiscreteFactor([node], cardinality, values=cpt.values)
+        factors.append(factor)
+
+    model.add_factors(*factors)
+
+    inference = VariableElimination(model)
+
+    prediction = inference.map_query(variables=["RISK"], evidence={"DAYS_EMPLOYED": X_test["DAYS_EMPLOYED"], "AMT_INCOME_TOTAL": X_test["AMT_INCOME_TOTAL"],
+                                                                   "NAME_EDUCATION_TYPE": X_test["NAME_EDUCATION_TYPE"], "FLAG_OWN_REALTY": X_test["FLAG_OWN_REALTY"],
+                                                                   "CNT_CHILDREN": X_test["CNT_CHILDREN"], "NAME_HOUSING_TYPE": X_test["NAME_HOUSING_TYPE"],
+                                                                   "FLAG_OWN_CAR": X_test["FLAG_OWN_CAR"]})
+    accuracy = accuracy_score(y_test, prediction['RISK'])
+    conf_matrix = confusion_matrix(y_test, prediction['RISK'])
+
+    print("Accuracy:", accuracy)
+    print("Confusion Matrix:")
+    print(conf_matrix)
+
+if __name__ == "__main__":
+    # combine_data()
+    # data_preprocess()
+    # analyze_data()
+    # train_model()
+    # train_customized()
+    train_others()
