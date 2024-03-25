@@ -8,7 +8,7 @@ def train_logistic_regression():
     print("train with logistic regression")
     data_df = pd.read_csv("./dataset/oversampling_records.csv")
     used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
-                     "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "RISK"]
+                     "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "DAYS_BIRTH", "RISK"]
     data_df = data_df[used_features]
     X_train, X_test, y_train, y_test = train_test_split(data_df.drop(columns=["RISK"]), data_df["RISK"], test_size=0.2,
                                                         random_state=42)

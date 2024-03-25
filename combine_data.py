@@ -126,13 +126,13 @@ def train_customized():
     print(risk_num / len(X_train))
     # used_features = ['DAYS_EMPLOYED', 'AMT_INCOME_TOTAL', 'NAME_INCOME_TYPE', "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY"]
     used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
-                     "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
+                     "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "DAYS_BIRTH"]
     # model = BayesianNetwork([('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('NAME_INCOME_TYPE', 'AMT_INCOME_TOTAL'),
     #                          ('AMT_INCOME_TOTAL', 'RISK'), ("NAME_EDUCATION_TYPE", "RISK"), ("FLAG_OWN_REALTY", "RISK")])
     # estimator = MaximumLikelihoodEstimator(model, X_train)
     model = BayesianNetwork([('DAYS_EMPLOYED', 'RISK'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'RISK'), 
                              ("NAME_EDUCATION_TYPE", "RISK"),("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"), 
-                             ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK")])
+                             ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK"), ("DAYS_BIRTH", "RISK")])
     model.fit(X_train, estimator=MaximumLikelihoodEstimator)
     dump(model, "./BayesianNetwork_MLE.joblib")
     predictions = model.predict(X_test[used_features])
@@ -224,5 +224,5 @@ if __name__ == "__main__":
     # data_preprocess()
     # analyze_data()
     # train_model()
-    # train_customized()
-    train_others()
+    train_customized()
+    # train_others()
