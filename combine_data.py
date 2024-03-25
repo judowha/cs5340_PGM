@@ -45,17 +45,6 @@ def combine_data():
 
 def data_preprocess():
     credit_data = pd.read_csv("./dataset/complete_credit_record.csv")
-    total_rows = len(credit_data)
-    risk_count = (credit_data["RISK"] == 1).sum()
-    diff = risk_count - (total_rows - risk_count)
-    if diff > 0:
-        risk_0_rows = credit_data[credit_data['RISK'] == 0]
-        duplicated_rows = risk_0_rows.sample(n=diff, replace=True)
-        credit_data = pd.concat([credit_data, duplicated_rows], ignore_index=True)
-    if diff < 0:
-        risk_0_rows = credit_data[credit_data['RISK'] == 1]
-        duplicated_rows = risk_0_rows.sample(n=-diff, replace=True)
-        credit_data = pd.concat([credit_data, duplicated_rows], ignore_index=True)
 
     columns_to_normalize = ["AMT_INCOME_TOTAL", "DAYS_EMPLOYED", "DAYS_BIRTH"]
     # scaler = StandardScaler()
@@ -71,7 +60,23 @@ def data_preprocess():
     credit_data["NAME_EDUCATION_TYPE"] = credit_data["NAME_EDUCATION_TYPE"].replace(education_type_dict)
     credit_data["NAME_FAMILY_STATUS"] = credit_data["NAME_FAMILY_STATUS"].replace(family_type_dict)
     credit_data["NAME_HOUSING_TYPE"] = credit_data["NAME_HOUSING_TYPE"].replace(housing_type_dict)
-    credit_data.to_csv("./dataset/oversampling_records.csv")
+
+    Train_data, Test_data, _, _ = train_test_split(credit_data, credit_data["RISK"], test_size=0.2, random_state=42)
+
+    total_rows = len(Train_data)
+    risk_count = (Train_data["RISK"] == 1).sum()
+    diff = risk_count - (total_rows - risk_count)
+    if diff > 0:
+        risk_0_rows = Train_data[Train_data['RISK'] == 0]
+        duplicated_rows = risk_0_rows.sample(n=diff, replace=True)
+        Train_data = pd.concat([Train_data, duplicated_rows], ignore_index=True)
+    if diff < 0:
+        risk_0_rows = Train_data[Train_data['RISK'] == 1]
+        duplicated_rows = risk_0_rows.sample(n=-diff, replace=True)
+        Train_data = pd.concat([Train_data, duplicated_rows], ignore_index=True)
+
+        Train_data.to_csv("./dataset/train.csv")
+        Test_data.to_csv("./dataset/test.csv")
 
 
 def analyze_data():
@@ -219,10 +224,44 @@ def train_others():
     print("Confusion Matrix:")
     print(conf_matrix)
 
+
+def train_new():
+    print("train with MLE")
+    train_df = pd.read_csv("./dataset/train.csv")
+    # used_features = ['DAYS_EMPLOYED', 'AMT_INCOME_TOTAL', 'NAME_INCOME_TYPE', "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY"]
+    used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
+                     "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "DAYS_BIRTH"]
+    # model = BayesianNetwork([('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('NAME_INCOME_TYPE', 'AMT_INCOME_TOTAL'),
+    #                          ('AMT_INCOME_TOTAL', 'RISK'), ("NAME_EDUCATION_TYPE", "RISK"), ("FLAG_OWN_REALTY", "RISK")])
+    # estimator = MaximumLikelihoodEstimator(model, X_train)
+    model = BayesianNetwork([('DAYS_EMPLOYED', 'RISK'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'RISK'),
+                             ("NAME_EDUCATION_TYPE", "RISK"),("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"),
+                             ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK"), ("DAYS_BIRTH", "RISK")])
+    model.fit(train_df, estimator=MaximumLikelihoodEstimator)
+
+    dump(model, "./BayesianNetwork_MLE_new.joblib")
+    test_df = pd.read_csv("./dataset/test.csv")
+
+    predictions = model.predict(test_df[used_features])
+    y_test = test_df["RISK"]
+    accuracy = accuracy_score(y_test, predictions["RISK"].to_numpy())
+
+    # Calculate confusion matrix
+    conf_matrix = confusion_matrix(y_test, predictions["RISK"].to_numpy())
+
+    print("Accuracy:", accuracy)
+    print("Confusion Matrix:")
+    print(conf_matrix)
+
+    possibilities = model.predict_probability(test_df[used_features])
+    possibilities.to_csv("./dataset/possibilities.csv")
+
+
 if __name__ == "__main__":
     # combine_data()
     # data_preprocess()
     # analyze_data()
     # train_model()
-    train_customized()
+    # train_customized()
     # train_others()
+    train_new()
