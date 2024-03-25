@@ -3,7 +3,7 @@ import numpy as np
 import pomegranate.bayesian_network
 from pgmpy.factors.discrete import DiscreteFactor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.metrics import matthews_corrcoef, confusion_matrix, accuracy_score
+from sklearn.metrics import matthews_corrcoef, confusion_matrix, accuracy_score, f1_score
 from scipy.stats import pearsonr
 from sklearn.model_selection import train_test_split
 from pgmpy.models import BayesianNetwork, MarkovNetwork, MarkovModel
@@ -17,14 +17,14 @@ def combine_data():
     join_df = pd.merge(application, credit, on="ID", how='inner')
     columns_to_replace = ["FLAG_OWN_CAR", "FLAG_OWN_REALTY", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"]
     join_df[columns_to_replace] = join_df[columns_to_replace].replace({'Y': 1, 'N': 0})
-    indue_status = ["X", "C", "0", "1"]
-    risk = join_df["STATUS"].isin(indue_status)
-    risk_value = np.where(risk, 0, 1)
-    join_df['RISK'] = risk_value
+    outdue_status = ["1", "2", "3", "4", "5"]
+    not_safe = join_df["STATUS"].isin(outdue_status)
+    safe_value = np.where(not_safe, 0, 1)
+    join_df['SAFE'] = safe_value
     print(join_df.columns)
 
-    risk_by_id = join_df.groupby('ID')['RISK'].transform('max') == 1
-    join_df.loc[risk_by_id, 'RISK'] = 1
+    safe_by_id = join_df.groupby('ID')['SAFE'].transform('max') == 0
+    join_df.loc[safe_by_id, 'SAFE'] = 0
     join_df = join_df.drop_duplicates(subset='ID', keep='first')
     print(join_df.columns)
 
@@ -61,22 +61,22 @@ def data_preprocess():
     credit_data["NAME_FAMILY_STATUS"] = credit_data["NAME_FAMILY_STATUS"].replace(family_type_dict)
     credit_data["NAME_HOUSING_TYPE"] = credit_data["NAME_HOUSING_TYPE"].replace(housing_type_dict)
 
-    Train_data, Test_data, _, _ = train_test_split(credit_data, credit_data["RISK"], test_size=0.2, random_state=42)
+    Train_data, Test_data, _, _ = train_test_split(credit_data, credit_data["SAFE"], test_size=0.2, random_state=42)
 
     total_rows = len(Train_data)
-    risk_count = (Train_data["RISK"] == 1).sum()
-    diff = risk_count - (total_rows - risk_count)
+    safe_count = (Train_data["SAFE"] == 1).sum()
+    diff = safe_count - (total_rows - safe_count)
     if diff > 0:
-        risk_0_rows = Train_data[Train_data['RISK'] == 0]
-        duplicated_rows = risk_0_rows.sample(n=diff, replace=True)
+        safe_0_rows = Train_data[Train_data['SAFE'] == 0]
+        duplicated_rows = safe_0_rows.sample(n=diff, replace=True)
         Train_data = pd.concat([Train_data, duplicated_rows], ignore_index=True)
     if diff < 0:
-        risk_0_rows = Train_data[Train_data['RISK'] == 1]
-        duplicated_rows = risk_0_rows.sample(n=-diff, replace=True)
+        safe_1_rows = Train_data[Train_data['SAFE'] == 1]
+        duplicated_rows = safe_1_rows.sample(n=-diff, replace=True)
         Train_data = pd.concat([Train_data, duplicated_rows], ignore_index=True)
 
-        Train_data.to_csv("./dataset/train.csv")
-        Test_data.to_csv("./dataset/test.csv")
+    Train_data.to_csv("./dataset/train.csv")
+    Test_data.to_csv("./dataset/test.csv")
 
 
 def analyze_data():
@@ -234,22 +234,27 @@ def train_new():
     # model = BayesianNetwork([('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('NAME_INCOME_TYPE', 'AMT_INCOME_TOTAL'),
     #                          ('AMT_INCOME_TOTAL', 'RISK'), ("NAME_EDUCATION_TYPE", "RISK"), ("FLAG_OWN_REALTY", "RISK")])
     # estimator = MaximumLikelihoodEstimator(model, X_train)
-    model = BayesianNetwork([('DAYS_EMPLOYED', 'RISK'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'RISK'),
-                             ("NAME_EDUCATION_TYPE", "RISK"),("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"),
-                             ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK"), ("DAYS_BIRTH", "RISK")])
-    model.fit(train_df, estimator=MaximumLikelihoodEstimator)
+    model = BayesianNetwork([('DAYS_EMPLOYED', 'SAFE'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'SAFE'),
+                             ("NAME_EDUCATION_TYPE", "SAFE"), ("FLAG_OWN_REALTY", "SAFE"), ("CNT_CHILDREN", "SAFE"),
+                             ("NAME_HOUSING_TYPE", "SAFE"), ("FLAG_OWN_CAR", "SAFE"), ("DAYS_BIRTH", "SAFE")])
+
+    train_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
+                     "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "DAYS_BIRTH", "SAFE"]
+    model.fit(train_df[train_features], estimator=MaximumLikelihoodEstimator)
 
     dump(model, "./BayesianNetwork_MLE_new.joblib")
     test_df = pd.read_csv("./dataset/test.csv")
 
     predictions = model.predict(test_df[used_features])
-    y_test = test_df["RISK"]
-    accuracy = accuracy_score(y_test, predictions["RISK"].to_numpy())
+    y_test = test_df["SAFE"]
+    accuracy = accuracy_score(y_test, predictions["SAFE"].to_numpy())
+    f1 = f1_score(y_test, predictions["SAFE"].to_numpy(), average='binary')
 
     # Calculate confusion matrix
-    conf_matrix = confusion_matrix(y_test, predictions["RISK"].to_numpy())
+    conf_matrix = confusion_matrix(y_test, predictions["SAFE"].to_numpy())
 
     print("Accuracy:", accuracy)
+    print("f1 score", f1)
     print("Confusion Matrix:")
     print(conf_matrix)
 
@@ -257,11 +262,29 @@ def train_new():
     possibilities.to_csv("./dataset/possibilities.csv")
 
 
+def try_thresholds():
+    test_df = pd.read_csv("./dataset/test.csv")
+    y_test = test_df["SAFE"]
+    possibility = pd.read_csv("./dataset/possibilities.csv")
+    possibility['SAFE'] = possibility['SAFE_0'].apply(lambda x: 0 if x > 0.0 else 1)
+    accuracy = accuracy_score(y_test, possibility["SAFE"].to_numpy())
+
+    # Calculate confusion matrix
+    conf_matrix = confusion_matrix(y_test, possibility["SAFE"].to_numpy())
+    f1 = f1_score(y_test, possibility["SAFE"].to_numpy(), average='binary')
+
+    print("Accuracy:", accuracy)
+    print("f1 score", f1)
+    print("Confusion Matrix:")
+    print(conf_matrix)
+
+
 if __name__ == "__main__":
-    # combine_data()
-    # data_preprocess()
+    combine_data()
+    data_preprocess()
     # analyze_data()
     # train_model()
     # train_customized()
     # train_others()
     train_new()
+    # try_thresholds()
