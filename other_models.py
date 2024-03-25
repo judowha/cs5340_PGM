@@ -7,7 +7,6 @@ from sklearn.linear_model import LogisticRegression
 def train_logistic_regression():
     print("train with logistic regression")
     data_df = pd.read_csv("./dataset/oversampling_records.csv")
-    #data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL", "STATUS", "CODE_GENDER", "Unnamed: 0", "OCCUPATION_TYPE"])
     used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
                      "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "RISK"]
     data_df = data_df[used_features]
