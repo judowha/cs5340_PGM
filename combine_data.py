@@ -9,12 +9,12 @@ from pgmpy.estimators import HillClimbSearch, MaximumLikelihoodEstimator, BicSco
 from pgmpy.inference import VariableElimination, BeliefPropagation
 
 def combine_data():
-    application = pd.read_csv("./dataset/application_record.csv")
-    credit = pd.read_csv("./dataset/credit_record.csv")
+    application = pd.read_csv("./dataset/application_record.csv", index_col= None)
+    credit = pd.read_csv("./dataset/credit_record.csv", index_col= None)
     join_df = pd.merge(application, credit, on="ID", how='inner')
     columns_to_replace = ["FLAG_OWN_CAR", "FLAG_OWN_REALTY", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"]
     join_df[columns_to_replace] = join_df[columns_to_replace].replace({'Y': 1, 'N': 0})
-    indue_status = ["X", "C", "0", "1"]
+    indue_status = ["X", "C", "0", ]
     risk = join_df["STATUS"].isin(indue_status)
     risk_value = np.where(risk, 0, 1)
     join_df['RISK'] = risk_value
@@ -37,22 +37,22 @@ def combine_data():
     print("unique housing types: ", unique_housing_types)
     print("unique status types: ", unique_status_types)
 
-    join_df.to_csv("./dataset/complete_credit_record.csv")
+    join_df.to_csv("./dataset/complete_credit_record.csv", index=None)
 
 
 def data_preprocess():
     credit_data = pd.read_csv("./dataset/complete_credit_record.csv")
-    total_rows = len(credit_data)
-    risk_count = (credit_data["RISK"] == 1).sum()
-    diff = risk_count - (total_rows - risk_count)
-    if diff > 0:
-        risk_0_rows = credit_data[credit_data['RISK'] == 0]
-        duplicated_rows = risk_0_rows.sample(n=diff, replace=True)
-        credit_data = pd.concat([credit_data, duplicated_rows], ignore_index=True)
-    if diff < 0:
-        risk_0_rows = credit_data[credit_data['RISK'] == 1]
-        duplicated_rows = risk_0_rows.sample(n=-diff, replace=True)
-        credit_data = pd.concat([credit_data, duplicated_rows], ignore_index=True)
+    # total_rows = len(credit_data)
+    # risk_count = (credit_data["RISK"] == 1).sum()
+    # diff = risk_count - (total_rows - risk_count)
+    # if diff > 0:
+    #     risk_0_rows = credit_data[credit_data['RISK'] == 0]
+    #     duplicated_rows = risk_0_rows.sample(n=diff, replace=True)
+    #     credit_data = pd.concat([credit_data, duplicated_rows], ignore_index=True)
+    # if diff < 0:
+    #     risk_0_rows = credit_data[credit_data['RISK'] == 1]
+    #     duplicated_rows = risk_0_rows.sample(n=-diff, replace=True)
+    #     credit_data = pd.concat([credit_data, duplicated_rows], ignore_index=True)
 
     columns_to_normalize = ["AMT_INCOME_TOTAL", "DAYS_EMPLOYED", "DAYS_BIRTH"]
     # scaler = StandardScaler()
@@ -68,8 +68,21 @@ def data_preprocess():
     credit_data["NAME_EDUCATION_TYPE"] = credit_data["NAME_EDUCATION_TYPE"].replace(education_type_dict)
     credit_data["NAME_FAMILY_STATUS"] = credit_data["NAME_FAMILY_STATUS"].replace(family_type_dict)
     credit_data["NAME_HOUSING_TYPE"] = credit_data["NAME_HOUSING_TYPE"].replace(housing_type_dict)
-    credit_data.to_csv("./dataset/oversampling_records.csv")
+    credit_data.to_csv("./dataset/oversampling_records.csv", index=None)
 
+def oversample(train_data):
+    total_rows = len(train_data)
+    risk_count = (train_data["RISK"] == 1).sum()
+    diff = risk_count - (total_rows - risk_count)
+    if diff > 0:
+        risk_0_rows = train_data[train_data['RISK'] == 0]
+        duplicated_rows = risk_0_rows.sample(n=diff, replace=True)
+        train_data = pd.concat([train_data, duplicated_rows], ignore_index=True)
+    if diff < 0:
+        risk_0_rows = train_data[train_data['RISK'] == 1]
+        duplicated_rows = risk_0_rows.sample(n=-diff, replace=True)
+        train_data = pd.concat([train_data, duplicated_rows], ignore_index=True)
+    return train_data, train_data["RISK"]
 
 def analyze_data():
     credit_data = pd.read_csv("./dataset/oversampling_records.csv")
@@ -91,6 +104,8 @@ def train_model():
     data_df = pd.read_csv("./dataset/oversampling_records.csv")
     data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
     X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.2, random_state=42)
+    
+    X_train, X_test = oversample(X_train)
     
     hc = MaximumLikelihoodEstimator(X_train)
     best_model = hc.estimate(scoring_method=BicScore(X_train))
@@ -117,7 +132,9 @@ def train_customized():
     data_df = pd.read_csv("./dataset/oversampling_records.csv")
     data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
     print(data_df["RISK"].unique())
-    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.1, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.2)
+    X_train, X_test = oversample(X_train)
+    print(X_train)
     risk_num = (X_train["RISK"] == 1).sum()
     print(risk_num / len(X_train))
     # used_features = ['DAYS_EMPLOYED', 'AMT_INCOME_TOTAL', 'NAME_INCOME_TYPE', "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY"]
@@ -129,7 +146,7 @@ def train_customized():
     model = BayesianNetwork([('DAYS_EMPLOYED', 'RISK'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'RISK'), 
                              ("NAME_EDUCATION_TYPE", "RISK"),("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"), 
                              ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK")])
-    model.fit(X_train, estimator=MaximumLikelihoodEstimator)
+    model.fit(X_train, estimator=BayesianEstimator)
     predictions = model.predict(X_test[used_features])
     print(predictions["RISK"].unique())
     print(len(y_test))
