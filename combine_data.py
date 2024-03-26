@@ -266,7 +266,7 @@ def try_thresholds():
     test_df = pd.read_csv("./dataset/test.csv")
     y_test = test_df["SAFE"]
     possibility = pd.read_csv("./dataset/possibilities.csv")
-    possibility['SAFE'] = possibility['SAFE_0'].apply(lambda x: 0 if x > 0.0 else 1)
+    possibility['SAFE'] = possibility['SAFE_0'].apply(lambda x: 0 if x > 0.3 else 1)
     accuracy = accuracy_score(y_test, possibility["SAFE"].to_numpy())
 
     # Calculate confusion matrix
@@ -280,11 +280,11 @@ def try_thresholds():
 
 
 if __name__ == "__main__":
-    combine_data()
-    data_preprocess()
+    # combine_data()
+    # data_preprocess()
     # analyze_data()
     # train_model()
     # train_customized()
     # train_others()
-    train_new()
-    # try_thresholds()
+    # train_new()
+    try_thresholds()
