@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-import pomegranate.bayesian_network
+# import pomegranate.bayesian_network
 from pgmpy.factors.discrete import DiscreteFactor
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import matthews_corrcoef, confusion_matrix, accuracy_score
@@ -22,11 +22,11 @@ def combine_data():
     indue_status = ["X", "C", "0", ]
     risk = join_df["STATUS"].isin(indue_status)
     risk_value = np.where(risk, 1, 0)
-    join_df['RISK'] = risk_value
+    join_df['GOOD_REPUTATION'] = risk_value
     print(join_df.columns)
 
-    risk_by_id = join_df.groupby('ID')['RISK'].transform('min') == 0
-    join_df.loc[risk_by_id, 'RISK'] = 0
+    risk_by_id = join_df.groupby('ID')['GOOD_REPUTATION'].transform('min') == 0
+    join_df.loc[risk_by_id, 'GOOD_REPUTATION'] = 0
     join_df = join_df.drop_duplicates(subset='ID', keep='first')
     print(join_df.columns)
 
@@ -42,15 +42,15 @@ def combine_data():
     print("unique housing types: ", unique_housing_types)
     print("unique status types: ", unique_status_types)
 
-    join_df.to_csv("./dataset/complete_credit_record.csv", index=None)
+    join_df.to_csv("./dataset/combined_data.csv", index=None)
 
 
 def data_preprocess():
-    credit_data = pd.read_csv("./dataset/complete_credit_record.csv")
+    credit_data = pd.read_csv("./dataset/combined_data.csv")
 
     columns_to_normalize = ["AMT_INCOME_TOTAL", "DAYS_EMPLOYED", "DAYS_BIRTH"]
     for col in columns_to_normalize:
-        credit_data[col] = pd.qcut(credit_data[col], q=30, labels=False, duplicates='drop') 
+        credit_data[col] = pd.qcut(credit_data[col], q=10, labels=False, duplicates='drop') 
     
     credit_data["OCCUPATION_TYPE"] = credit_data["OCCUPATION_TYPE"].fillna("UNKOWN")
 
@@ -62,95 +62,61 @@ def data_preprocess():
     credit_data["NAME_EDUCATION_TYPE"] = credit_data["NAME_EDUCATION_TYPE"].replace(education_type_dict)
     credit_data["NAME_FAMILY_STATUS"] = credit_data["NAME_FAMILY_STATUS"].replace(family_type_dict)
     credit_data["NAME_HOUSING_TYPE"] = credit_data["NAME_HOUSING_TYPE"].replace(housing_type_dict)
-    credit_data.to_csv("./dataset/oversampling_records.csv", index=None)
+    credit_data.to_csv("./dataset/preprocessed_data.csv", index=None)
 
 def oversample(train_data):
     total_rows = len(train_data)
-    risk_count = (train_data["RISK"] == 0).sum()
+    risk_count = (train_data["GOOD_REPUTATION"] == 0).sum()
     diff = risk_count - (total_rows - risk_count)
     
     if diff > 0:
-        risk_0_rows = train_data[train_data['RISK'] == 1]
+        risk_0_rows = train_data[train_data['GOOD_REPUTATION'] == 1]
     else:
-        risk_0_rows = train_data[train_data['RISK'] == 0]
+        risk_0_rows = train_data[train_data['GOOD_REPUTATION'] == 0]
     duplicated_rows = risk_0_rows.sample(n=abs(diff), replace=True)
     train_data = pd.concat([train_data, duplicated_rows], ignore_index=True)
-    return train_data, train_data["RISK"]
+    return train_data, train_data["GOOD_REPUTATION"]
 
 def analyze_data():
-    credit_data = pd.read_csv("./dataset/oversampling_records.csv")
+    credit_data = pd.read_csv("./dataset/preprocessed_data.csv")
     binary_features = ["FLAG_OWN_CAR", "FLAG_OWN_REALTY", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"]
     for feat in binary_features:
-        sim = matthews_corrcoef(credit_data[feat], credit_data["RISK"])
+        sim = matthews_corrcoef(credit_data[feat], credit_data["GOOD_REPUTATION"])
         print(f"{feat} correlation coefficient {sim}")
     numerical_features = ["CNT_CHILDREN", "AMT_INCOME_TOTAL", "CNT_FAM_MEMBERS", "DAYS_EMPLOYED", "DAYS_BIRTH"]
     for feat in numerical_features:
-        correlation_coefficient, p_value = pearsonr(credit_data[feat], credit_data["RISK"])
+        correlation_coefficient, p_value = pearsonr(credit_data[feat], credit_data["GOOD_REPUTATION"])
         print(f"{feat} correlation coefficient {correlation_coefficient}, p-value {p_value}")
     categorical_features = ["NAME_INCOME_TYPE", "NAME_EDUCATION_TYPE", "NAME_FAMILY_STATUS", "NAME_HOUSING_TYPE"]
     for feat in categorical_features:
-        correlation_coefficient, p_value = pearsonr(credit_data[feat], credit_data["RISK"])
+        correlation_coefficient, p_value = pearsonr(credit_data[feat], credit_data["GOOD_REPUTATION"])
         print(f"{feat} correlation coefficient {correlation_coefficient}, p-value {p_value}")
-
-
-def train_model():
-    data_df = pd.read_csv("./dataset/oversampling_records.csv")
-    data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
-    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.2, random_state=42)
-    
-    X_train, X_test = oversample(X_train)
-    
-    hc = MaximumLikelihoodEstimator(X_train)
-    best_model = hc.estimate(scoring_method=BicScore(X_train))
-    edges = list(best_model.edges())
-    model = BayesianNetwork(edges)
-        
-    # model = MarkovNetwork([('AMT_INCOME_TOTAL', 'RISK'),('AMT_INCOME_TOTAL', 'NAME_HOUSING_TYPE'), ('NAME_EDUCATION_TYPE', 'RISK'), 
-    #                          ('NAME_EDUCATION_TYPE', 'AMT_INCOME_TOTAL'),("FLAG_OWN_CAR", "RISK"),
-    #                          ("DAYS_EMPLOYED", "AMT_INCOME_TOTAL"), ("NAME_INCOME_TYPE", "AMT_INCOME_TOTAL"),
-    #                          ("NAME_HOUSING_TYPE", "RISK"), ("CNT_CHILDREN", "RISK"), ("FLAG_OWN_REALTY", "RISK"), ])
-    model.fit(X_train, estimator=BayesianEstimator)
-    # Perform inference
-    infer = VariableElimination(model)
-    test_dict = X_test[["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_CAR", "DAYS_EMPLOYED", "NAME_INCOME_TYPE",
-                        "NAME_HOUSING_TYPE", "CNT_CHILDREN", "FLAG_OWN_REALTY"]].to_dict("records")
-    result = []
-    for i in test_dict:
-        query_result = infer.query(variables=['RISK'], evidence=i)
-        result.append(np.argmax(query_result.values))
-    matrix = confusion_matrix(y_test, result, labels=[0, 1])
-    print(str(matrix))
 
 def train_customized():
     print("train with MLE")
-    data_df = pd.read_csv("./dataset/oversampling_records.csv")
+    data_df = pd.read_csv("./dataset/preprocessed_data.csv")
     data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
-    print(data_df["RISK"].unique())
-    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.2, random_state=42)
+    print(data_df["GOOD_REPUTATION"].unique())
+    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
     # X_train, y_train = oversample(X_train)
     
-    risk_num = (X_train["RISK"] == 1).sum()
+    risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
     print(risk_num / len(X_train))
-    # used_features = ['DAYS_EMPLOYED', 'AMT_INCOME_TOTAL', 'NAME_INCOME_TYPE', "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY"]
-    # model = BayesianNetwork([('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('NAME_INCOME_TYPE', 'AMT_INCOME_TOTAL'),
-    #                          ('AMT_INCOME_TOTAL', 'RISK'), ("NAME_EDUCATION_TYPE", "RISK"), ("FLAG_OWN_REALTY", "RISK")])
-    # estimator = MaximumLikelihoodEstimator(model, X_train)
-    
     used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
-    model = BayesianNetwork([('DAYS_EMPLOYED', 'RISK'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'RISK'), 
-                             ("NAME_EDUCATION_TYPE", "RISK"),("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"),
-                             ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK"), ("DAYS_BIRTH", "RISK")])
-    model.fit(X_train, estimator=MaximumLikelihoodEstimator)
+    model = BayesianNetwork([('DAYS_EMPLOYED', 'GOOD_REPUTATION'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'GOOD_REPUTATION'), 
+                             ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),("FLAG_OWN_REALTY", "GOOD_REPUTATION"), ("CNT_CHILDREN", "GOOD_REPUTATION"),
+                             ("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), ("FLAG_OWN_CAR", "GOOD_REPUTATION"), ("DAYS_BIRTH", "GOOD_REPUTATION")])
+    model.fit(X_train, estimator=BayesianEstimator)
     dump(model, "./BayesianNetwork_MLE.joblib")
     predictions = model.predict(X_test[used_features])
-    print(predictions["RISK"].unique())
+    print(predictions["GOOD_REPUTATION"].unique())
     print(len(y_test))
     print(len(predictions))
-    accuracy = accuracy_score(y_test, predictions["RISK"].to_numpy())
+    accuracy = accuracy_score(y_test, predictions["GOOD_REPUTATION"].to_numpy())
 
     # Calculate confusion matrix
-    conf_matrix = confusion_matrix(y_test, predictions["RISK"].to_numpy())
-    f1 = f1_score(y_test, predictions["RISK"].to_numpy())
+    conf_matrix = confusion_matrix(y_test, predictions["GOOD_REPUTATION"].to_numpy())
+    f1 = f1_score(y_test, predictions["GOOD_REPUTATION"].to_numpy())
 
     print("Accuracy:", accuracy)
     print("Confusion Matrix:")
@@ -163,7 +129,7 @@ def search_model(X_train):
     edges = list(best_model.edges())
     used = []
     for i in edges:
-        if i[1] == "RISK":
+        if i[1] == "GOOD_REPUTATION":
             used.append(i[0])
     print(edges)
     print(used)
@@ -176,15 +142,15 @@ def train_others():
     print("train with expectation maximization")
     data_df = pd.read_csv("./dataset/oversampling_records.csv")
     data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
-    print(data_df["RISK"].unique())
-    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["RISK"], test_size=0.1, random_state=42)
-    risk_num = (X_train["RISK"] == 1).sum()
+    print(data_df["GOOD_REPUTATION"].unique())
+    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.1, random_state=42)
+    risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
     print(risk_num / len(X_train))
     used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN",
                      "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
-    model = MarkovModel([('DAYS_EMPLOYED', 'RISK'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'RISK'),
-                        ("NAME_EDUCATION_TYPE", "RISK"), ("FLAG_OWN_REALTY", "RISK"), ("CNT_CHILDREN", "RISK"),
-                        ("NAME_HOUSING_TYPE", "RISK"), ("FLAG_OWN_CAR", "RISK")])
+    model = MarkovModel([('DAYS_EMPLOYED', 'GOOD_REPUTATION'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'GOOD_REPUTATION'),
+                        ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"), ("FLAG_OWN_REALTY", "GOOD_REPUTATION"), ("CNT_CHILDREN", "GOOD_REPUTATION"),
+                        ("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), ("FLAG_OWN_CAR", "GOOD_REPUTATION")])
     # ten_to_two_array = []
     # for i in range(10):
     #     for j in range(2):
@@ -210,14 +176,14 @@ def train_others():
     #     for j in range(2):
     #         two_to_two_array.append([i, j])
 
-    # factor_daysEmp_risk = DiscreteFactor(['DAYS_EMPLOYED', 'RISK'], cardinality=[10, 2], values=np.array(ten_to_two_array))
+    # factor_daysEmp_risk = DiscreteFactor(['DAYS_EMPLOYED', 'GOOD_REPUTATION'], cardinality=[10, 2], values=np.array(ten_to_two_array))
     # factor_daysEmp_income = DiscreteFactor(['DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'], cardinality=[10, 10], values=np.array(ten_to_ten_array))
-    # factor_income_risk = DiscreteFactor(['AMT_INCOME_TOTAL', 'RISK'], cardinality=[10, 2], values=np.array(ten_to_two_array))
-    # factor_education_risk = DiscreteFactor(["NAME_EDUCATION_TYPE", "RISK"], cardinality=[5, 2], values=np.array(five_to_two_array))
-    # factor_realty_risk = DiscreteFactor(["FLAG_OWN_REALTY", "RISK"], cardinality=[2, 2], values=np.array(two_to_two_array))
-    # factor_children_risk = DiscreteFactor(["CNT_CHILDREN", "RISK"], cardinality=[10, 2], values=np.array(ten_to_two_array))
-    # factor_housing_risk = DiscreteFactor(["NAME_HOUSING_TYPE", "RISK"], cardinality=[6, 2], values=np.array(six_to_two_array))
-    # factor_car_risk = DiscreteFactor(["FLAG_OWN_CAR", "RISK"], cardinality=[2, 2], values=np.array(two_to_two_array))
+    # factor_income_risk = DiscreteFactor(['AMT_INCOME_TOTAL', 'GOOD_REPUTATION'], cardinality=[10, 2], values=np.array(ten_to_two_array))
+    # factor_education_risk = DiscreteFactor(["NAME_EDUCATION_TYPE", "GOOD_REPUTATION"], cardinality=[5, 2], values=np.array(five_to_two_array))
+    # factor_realty_risk = DiscreteFactor(["FLAG_OWN_REALTY", "GOOD_REPUTATION"], cardinality=[2, 2], values=np.array(two_to_two_array))
+    # factor_children_risk = DiscreteFactor(["CNT_CHILDREN", "GOOD_REPUTATION"], cardinality=[10, 2], values=np.array(ten_to_two_array))
+    # factor_housing_risk = DiscreteFactor(["NAME_HOUSING_TYPE", "GOOD_REPUTATION"], cardinality=[6, 2], values=np.array(six_to_two_array))
+    # factor_car_risk = DiscreteFactor(["FLAG_OWN_CAR", "GOOD_REPUTATION"], cardinality=[2, 2], values=np.array(two_to_two_array))
     # model.add_factors(factor_daysEmp_risk, factor_car_risk, factor_housing_risk, factor_daysEmp_income, factor_children_risk, factor_realty_risk, factor_income_risk, factor_education_risk)
     mle = MaximumLikelihoodEstimator(model, X_train)
 
@@ -231,21 +197,21 @@ def train_others():
 
     inference = VariableElimination(model)
 
-    prediction = inference.map_query(variables=["RISK"], evidence={"DAYS_EMPLOYED": X_test["DAYS_EMPLOYED"], "AMT_INCOME_TOTAL": X_test["AMT_INCOME_TOTAL"],
+    prediction = inference.map_query(variables=["GOOD_REPUTATION"], evidence={"DAYS_EMPLOYED": X_test["DAYS_EMPLOYED"], "AMT_INCOME_TOTAL": X_test["AMT_INCOME_TOTAL"],
                                                                    "NAME_EDUCATION_TYPE": X_test["NAME_EDUCATION_TYPE"], "FLAG_OWN_REALTY": X_test["FLAG_OWN_REALTY"],
                                                                    "CNT_CHILDREN": X_test["CNT_CHILDREN"], "NAME_HOUSING_TYPE": X_test["NAME_HOUSING_TYPE"],
                                                                    "FLAG_OWN_CAR": X_test["FLAG_OWN_CAR"]})
-    accuracy = accuracy_score(y_test, prediction['RISK'])
-    conf_matrix = confusion_matrix(y_test, prediction['RISK'])
+    accuracy = accuracy_score(y_test, prediction['GOOD_REPUTATION'])
+    conf_matrix = confusion_matrix(y_test, prediction['GOOD_REPUTATION'])
 
     print("Accuracy:", accuracy)
     print("Confusion Matrix:")
     print(conf_matrix)
 
 if __name__ == "__main__":
-    # combine_data()
-    # data_preprocess()
-    # analyze_data()
+    combine_data()
+    data_preprocess()
+    analyze_data()
     # train_model()
     train_customized()
     # train_others()
