@@ -98,10 +98,11 @@ def train_customized():
     data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
     print(data_df["GOOD_REPUTATION"].unique())
     X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
-    # X_train, y_train = oversample(X_train)
+    X_train, y_train = oversample(X_train)
     
     risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
     print(risk_num / len(X_train))
+    X_train, _ = oversample(X_train) # to be commented
     used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
     model = BayesianNetwork([('DAYS_EMPLOYED', 'GOOD_REPUTATION'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'GOOD_REPUTATION'), 
                              ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),("FLAG_OWN_REALTY", "GOOD_REPUTATION"), ("CNT_CHILDREN", "GOOD_REPUTATION"),
@@ -208,10 +209,71 @@ def train_others():
     print("Confusion Matrix:")
     print(conf_matrix)
 
+def train():
+    print("train with MLE")
+    data_df = pd.read_csv("./dataset/preprocessed_data.csv")
+    data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
+    print(data_df["GOOD_REPUTATION"].unique())
+    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
+    X_train, y_train = oversample(X_train)
+    
+    risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
+    print(risk_num / len(X_train))
+    # X_train, _ = oversample(X_train) # to be commented
+    used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
+    model = BayesianNetwork([('DAYS_EMPLOYED', 'GOOD_REPUTATION'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'GOOD_REPUTATION'), 
+                             ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),("FLAG_OWN_REALTY", "GOOD_REPUTATION"), ("CNT_CHILDREN", "GOOD_REPUTATION"),
+                             ("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), ("FLAG_OWN_CAR", "GOOD_REPUTATION"), ("DAYS_BIRTH", "GOOD_REPUTATION")])
+    model.fit(X_train)
+    infer = BeliefPropagation(model)
+    test_dict = X_test[used_features].to_dict("records")
+    result = []
+    for i in test_dict:
+        query_result = infer.query(variables=['GOOD_REPUTATION'], evidence=i)
+        result.append(np.argmax(query_result.values))
+    conf_matrix = confusion_matrix(y_test, result, labels=[0, 1])
+    f1 = f1_score(y_test, result)
+
+    print("Confusion Matrix:")
+    print(conf_matrix)
+    print(f"f1: {f1}")
+
+def train_BP():
+    print("train with MLE")
+    data_df = pd.read_csv("./dataset/preprocessed_data.csv")
+    data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
+    print(data_df["GOOD_REPUTATION"].unique())
+    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
+    print(len(X_train))
+    X_train, y_train = oversample(X_train)
+    
+    risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
+    print(risk_num / len(X_train))
+    # X_train, _ = oversample(X_train) # to be commented
+    used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
+    model = BayesianNetwork([('DAYS_EMPLOYED', 'GOOD_REPUTATION'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'GOOD_REPUTATION'), 
+                             ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),("FLAG_OWN_REALTY", "GOOD_REPUTATION"), ("CNT_CHILDREN", "GOOD_REPUTATION"),
+                             ("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), ("FLAG_OWN_CAR", "GOOD_REPUTATION"), ("DAYS_BIRTH", "GOOD_REPUTATION")])
+    model.fit(X_train, estimator=BayesianEstimator)
+    infer = BeliefPropagation(model)
+    test_dict = X_test[used_features].to_dict("records")
+    result = []
+    for i in test_dict:
+        query_result = infer.query(variables=['GOOD_REPUTATION'], evidence=i)
+        result.append(np.argmax(query_result.values))
+    conf_matrix = confusion_matrix(y_test, result, labels=[0, 1])
+    f1 = f1_score(y_test, result)
+
+    print("Confusion Matrix:")
+    print(conf_matrix)
+    print(f"f1: {f1}")
+
 if __name__ == "__main__":
-    combine_data()
-    data_preprocess()
-    analyze_data()
+    # combine_data()
+    # data_preprocess()
+    # analyze_data()
     # train_model()
-    train_customized()
+    # train_customized()
     # train_others()
+    # train()
+    train_BP()
