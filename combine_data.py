@@ -95,7 +95,6 @@ def analyze_data():
 def train_customized():
     print("train with MLE")
     data_df = pd.read_csv("./dataset/preprocessed_data.csv")
-    # data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
     print(data_df["GOOD_REPUTATION"].unique())
     X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
     # X_train, y_train = oversample(X_train)
@@ -103,7 +102,6 @@ def train_customized():
     risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
     print(risk_num / len(X_train))
     used_features = ["NAME_HOUSING_TYPE", "FLAG_OWN_REALTY", "NAME_FAMILY_STATUS", "NAME_EDUCATION_TYPE", "FLAG_MOBIL", "OCCUPATION_TYPE", "NAME_INCOME_TYPE", "FLAG_WORK_PHONE", "FLAG_OWN_CAR", "DAYS_BIRTH", "AMT_INCOME_TOTAL"]
-    # used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "NAME_FAMILY_STATUS"]
     model = BayesianNetwork([("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), 
                              ("FLAG_OWN_REALTY", "GOOD_REPUTATION"), 
                              ("NAME_FAMILY_STATUS", "GOOD_REPUTATION"),
@@ -119,7 +117,7 @@ def train_customized():
                              ("FLAG_OWN_REALTY", "AMT_INCOME_TOTAL"),
                              ("NAME_EDUCATION_TYPE", "AMT_INCOME_TOTAL"),
                              ("OCCUPATION_TYPE", "NAME_INCOME_TYPE")])
-    model.fit(X_train, estimator=BayesianEstimator)
+    model.fit(X_train, estimator=MaximumLikelihoodEstimator)
     dump(model, "./BayesianNetwork_MLE.joblib")
     predictions = model.predict(X_test[used_features])
     print(predictions["GOOD_REPUTATION"].unique())
@@ -136,18 +134,44 @@ def train_customized():
     print(conf_matrix)
     print(f"f1: {f1}")
     
-def search_model(X_train):
-    hc = PC(X_train)
-    best_model = hc.estimate(scoring_method=BicScore(X_train))
-    edges = list(best_model.edges())
-    used = []
-    for i in edges:
-        if i[1] == "GOOD_REPUTATION":
-            used.append(i[0])
-    print(edges)
-    print(used)
-    return edges, used
-                
+def train_BP():
+    print("train with MLE")
+    data_df = pd.read_csv("./dataset/preprocessed_data.csv")
+    print(data_df["GOOD_REPUTATION"].unique())
+    X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
+    # X_train, y_train = oversample(X_train)
+    
+    risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
+    print(risk_num / len(X_train))
+    used_features = ["NAME_HOUSING_TYPE", "FLAG_OWN_REALTY", "NAME_FAMILY_STATUS", "NAME_EDUCATION_TYPE", "FLAG_MOBIL", "OCCUPATION_TYPE", "NAME_INCOME_TYPE", "FLAG_WORK_PHONE", "FLAG_OWN_CAR", "DAYS_BIRTH", "AMT_INCOME_TOTAL"]
+    model = BayesianNetwork([("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), 
+                             ("FLAG_OWN_REALTY", "GOOD_REPUTATION"), 
+                             ("NAME_FAMILY_STATUS", "GOOD_REPUTATION"),
+                             ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),
+                             ("FLAG_MOBIL", "GOOD_REPUTATION"),
+                             ("OCCUPATION_TYPE", "GOOD_REPUTATION"),
+                             ("NAME_INCOME_TYPE", "GOOD_REPUTATION"),
+                             ("FLAG_WORK_PHONE", "GOOD_REPUTATION"),
+                             ("FLAG_OWN_CAR", "GOOD_REPUTATION"), 
+                             ("DAYS_BIRTH", "GOOD_REPUTATION"),
+                             ("AMT_INCOME_TOTAL", "FLAG_OWN_CAR"),
+                             ("AMT_INCOME_TOTAL", "NAME_HOUSING_TYPE"),
+                             ("FLAG_OWN_REALTY", "AMT_INCOME_TOTAL"),
+                             ("NAME_EDUCATION_TYPE", "AMT_INCOME_TOTAL"),
+                             ("OCCUPATION_TYPE", "NAME_INCOME_TYPE")])
+    model.fit(X_train, estimator=MaximumLikelihoodEstimator)
+    infer = BeliefPropagation(model)
+    test_dict = X_test[used_features].to_dict("records")
+    result = []
+    for i in test_dict:
+        query_result = infer.query(variables=['GOOD_REPUTATION'], evidence=i)
+        result.append(np.argmax(query_result.values))
+    conf_matrix = confusion_matrix(y_test, result, labels=[0, 1])
+    f1 = f1_score(y_test, result)
+
+    print("Confusion Matrix:")
+    print(conf_matrix)
+    print(f"f1: {f1}")
     
 
 
@@ -226,5 +250,5 @@ if __name__ == "__main__":
     data_preprocess()
     analyze_data()
     # train_model()
-    train_customized()
+    train_BP()
     # train_others()
