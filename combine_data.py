@@ -95,31 +95,18 @@ def analyze_data():
 def train_customized():
     print("train with MLE")
     data_df = pd.read_csv("./dataset/preprocessed_data.csv")
-    # data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
+    data_df = data_df.drop(columns=["ID", "FLAG_WORK_PHONE", "FLAG_MOBIL", "FLAG_PHONE", "FLAG_EMAIL"])
     print(data_df["GOOD_REPUTATION"].unique())
     X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
-    X_train, y_train = oversample(X_train)
+    # X_train, y_train = oversample(X_train)
     
     risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
     print(risk_num / len(X_train))
-    used_features = ["NAME_HOUSING_TYPE", "FLAG_OWN_REALTY", "NAME_FAMILY_STATUS", "NAME_EDUCATION_TYPE", "FLAG_MOBIL", "OCCUPATION_TYPE", "NAME_INCOME_TYPE", "FLAG_WORK_PHONE", "FLAG_OWN_CAR", "DAYS_BIRTH", "AMT_INCOME_TOTAL"]
-    # used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", "NAME_HOUSING_TYPE", "FLAG_OWN_CAR", "NAME_FAMILY_STATUS"]
-    model = BayesianNetwork([("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), 
-                             ("FLAG_OWN_REALTY", "GOOD_REPUTATION"), 
-                             ("NAME_FAMILY_STATUS", "GOOD_REPUTATION"),
-                             ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),
-                             ("FLAG_MOBIL", "GOOD_REPUTATION"),
-                             ("OCCUPATION_TYPE", "GOOD_REPUTATION"),
-                             ("NAME_INCOME_TYPE", "GOOD_REPUTATION"),
-                             ("FLAG_WORK_PHONE", "GOOD_REPUTATION"),
-                             ("FLAG_OWN_CAR", "GOOD_REPUTATION"), 
-                             ("DAYS_BIRTH", "GOOD_REPUTATION"),
-                             ("AMT_INCOME_TOTAL", "FLAG_OWN_CAR"),
-                             ("AMT_INCOME_TOTAL", "NAME_HOUSING_TYPE"),
-                             ("FLAG_OWN_REALTY", "AMT_INCOME_TOTAL"),
-                             ("NAME_EDUCATION_TYPE", "AMT_INCOME_TOTAL"),
-                             ("OCCUPATION_TYPE", "NAME_INCOME_TYPE")])
-    model.fit(X_train, estimator=BayesianEstimator)
+    used_features = ["AMT_INCOME_TOTAL", "NAME_EDUCATION_TYPE", "FLAG_OWN_REALTY", "DAYS_EMPLOYED", "CNT_CHILDREN", "NAME_HOUSING_TYPE", "FLAG_OWN_CAR"]
+    model = BayesianNetwork([('DAYS_EMPLOYED', 'GOOD_REPUTATION'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'GOOD_REPUTATION'), 
+                             ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),("FLAG_OWN_REALTY", "GOOD_REPUTATION"), ("CNT_CHILDREN", "GOOD_REPUTATION"),
+                             ("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), ("FLAG_OWN_CAR", "GOOD_REPUTATION"), ("DAYS_BIRTH", "GOOD_REPUTATION")])
+    model.fit(X_train, estimator=MaximumLikelihoodEstimator)
     dump(model, "./BayesianNetwork_MLE.joblib")
     predictions = model.predict(X_test[used_features])
     print(predictions["GOOD_REPUTATION"].unique())
@@ -257,7 +244,7 @@ def train_BP():
     print(data_df["GOOD_REPUTATION"].unique())
     X_train, X_test, y_train, y_test = train_test_split(data_df, data_df["GOOD_REPUTATION"], test_size=0.2, random_state=42)
     print(len(X_train))
-    X_train, y_train = oversample(X_train)
+    # X_train, y_train = oversample(X_train)
     
     risk_num = (X_train["GOOD_REPUTATION"] == 1).sum()
     print(risk_num / len(X_train))
@@ -266,7 +253,7 @@ def train_BP():
     model = BayesianNetwork([('DAYS_EMPLOYED', 'GOOD_REPUTATION'), ('DAYS_EMPLOYED', 'AMT_INCOME_TOTAL'), ('AMT_INCOME_TOTAL', 'GOOD_REPUTATION'), 
                              ("NAME_EDUCATION_TYPE", "GOOD_REPUTATION"),("FLAG_OWN_REALTY", "GOOD_REPUTATION"), ("CNT_CHILDREN", "GOOD_REPUTATION"),
                              ("NAME_HOUSING_TYPE", "GOOD_REPUTATION"), ("FLAG_OWN_CAR", "GOOD_REPUTATION"), ("DAYS_BIRTH", "GOOD_REPUTATION")])
-    model.fit(X_train, estimator=BayesianEstimator)
+    model.fit(X_train, estimator=MaximumLikelihoodEstimator)
     infer = BeliefPropagation(model)
     test_dict = X_test[used_features].to_dict("records")
     result = []
@@ -285,7 +272,7 @@ if __name__ == "__main__":
     # data_preprocess()
     # analyze_data()
     # train_model()
-    # train_customized()
+    train_customized()
     # train_others()
     # train()
-    train_BP()
+    # train_BP()
